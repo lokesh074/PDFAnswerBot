@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversational Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: lightblue; /* Set background color to light blue */
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color:white;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        input[type="file"] {
+            display: block;
+            margin-top: 5px;
+        }
+
+        input[type="text"] {
+            width: calc(100% - 85px);
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            margin-right: 10px;
+        }
+
+        button {
+            padding: 8px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .response {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .response p {
+            margin: 0;
+        }
+
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .popup-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .popup-content {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .popup-buttons {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .popup-buttons button {
+            margin: 0 10px;
+        }
+
+        .container {
+            position: relative;
+        }
+
+        .file-container {
+            display: inline-block;
+        }
+
+        .file-container input[type="file"] {
+            margin-right: 10px;
+        }
+
+        .passport-box {
+            display: none;
+            width: 200px;
+            height: 250px;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            position: absolute;
+            top: 0;
+            right: 0;
+            overflow: hidden;
+        }
+
+        .passport-box img {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+            margin: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>PDFAnswerBot</h1>
+        <form id="uploadForm" enctype="multipart/form-data" class="form-group">
+            <label for="file">Upload PDF, DOCX, OR IMAGE:</label>
+            <br>
+            <input type="file" id="file" name="file" accept=".pdf,.docx,.png,.jpg,.jpeg" required>
+            <br>
+            <div class="passport-box" id="passportBox"></div> <!-- Passport-size box to display uploaded image -->
+            <button type="submit">Upload</button>
+        </form>
+        <div class="form-group">
+            <label for="question">Ask a Question:</label>
+            <input type="text" id="question" name="question" required>
+            <button onclick="validateAndAskQuestion()">Ask</button>
+        </div>
+        <div class="response" id="response"></div>
+    </div>
+
+    <div class="popup-container" id="popupContainer">
+        <div class="popup-content">
+            <p>Do you want to generate questions with their answers?</p>
+            <div class="popup-buttons">
+                <button onclick="generateQuestions()">Yes</button>
+                <button onclick="hidePopup()">No</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function resetFileValue() {
+            try {
+                // Make a POST request to your FastAPI endpoint to reset the file value
+                await fetch('/reset-file/', {
+                    method: 'POST'
+                });
+            } catch (error) {
+                console.error('Error resetting file value:', error);
+            }
+        }
+
+        // Call the resetFileValue function when the page is loaded or refreshed
+        window.addEventListener('load', resetFileValue);
+
+        async function askQuestion() {
+            const question = document.getElementById('question').value;
+            const responseDiv = document.getElementById('response');
+            responseDiv.innerHTML = ''; // Clear previous responses
+            try {
+                const response = await fetch('/ask-question/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question })
+                });
+                const data = await response.json();
+                if (data.Status) {
+                    responseDiv.innerHTML = `<p class="error">${data.Status}</p>`;
+                    responseDiv.style.backgroundColor = 'lightblue'; // Change background color
+                } else {
+                    responseDiv.innerHTML = `<p><strong>Question:</strong> ${question}</p>
+                                             <p><strong>Answer:</strong> ${data.Answer}</p>`;
+                    responseDiv.style.backgroundColor = 'lightblue'; // Change background color
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                responseDiv.innerHTML = '<p class="error">Error: Unable to get answer for your question.</p>';
+            }
+        }
+
+        // Add keydown event listener to input field to detect Enter key press
+        document.getElementById('question').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                validateAndAskQuestion(); // Call validateAndAskQuestion function if Enter key is pressed
+            }
+        });
+
+        async function generateQuestions() {
+            askQuestion();
+            hidePopup();
+        }
+
+        function showPopup() {
+            document.getElementById('popupContainer').style.display = 'flex';
+        }
+
+        function hidePopup() {
+            document.getElementById('popupContainer').style.display = 'none';
+        }
+
+        async function validateAndAskQuestion() {
+            const question = document.getElementById('question').value.trim();
+            if (!question) {
+                showPopup();
+            } else {
+                askQuestion();
+            }
+        }
+
+        const uploadForm = document.getElementById('uploadForm');
+        uploadForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const formData = new FormData(uploadForm);
+            const responseDiv = document.getElementById('response');
+            responseDiv.innerHTML = ''; // Clear previous responses
+            try {
+                const response = await fetch('/upload/', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.Status === "Successfully uploaded") {
+                    responseDiv.innerHTML = `<p><strong>${data.Status}</strong></p>`;
+                    responseDiv.style.backgroundColor = 'lightgreen'; // Change background color
+                } else {
+                    responseDiv.innerHTML = `<p><strong>${data.Status}</strong></p>`;
+                    responseDiv.style.backgroundColor = 'lightblue'; // Change background color
+                }
+
+                // Check if the uploaded file is an image
+                const fileInput = document.getElementById('file');
+                const file = fileInput.files[0];
+                const fileExtension = file.name.split('.').pop().toLowerCase();
+                const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp']; // Add more image extensions if needed
+                const passportBox = document.getElementById('passportBox');
+
+                if (imageExtensions.includes(fileExtension)) {
+                    // Display uploaded image in the passport-size box
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        const imgElement = document.createElement('img');
+                        imgElement.src = event.target.result;
+                        passportBox.innerHTML = ''; // Clear previous image
+                        passportBox.appendChild(imgElement);
+                        passportBox.style.display = 'inline-block'; // Show the passport box
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    passportBox.style.display = 'none'; // Hide the passport box if not an image
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                responseDiv.innerHTML = '<p class="error">Error: Unable to upload file.</p>';
+                responseDiv.style.backgroundColor = 'lightblue'; // Change background color
+            }
+        });
+
+    </script>
+</body>
+
+</html>
